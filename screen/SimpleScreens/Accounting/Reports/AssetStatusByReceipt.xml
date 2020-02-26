@@ -13,7 +13,7 @@ along with this software (see the LICENSE.md file). If not, see
 <http://creativecommons.org/publicdomain/zero/1.0/>.
 -->
 <screen xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://moqui.org/xsd/xml-screen-2.1.xsd"
-        default-menu-title="Asset On Hand Summary" default-menu-include="false">
+        default-menu-title="Asset Status by Receipt" default-menu-include="false">
 
     <transition name="editProduct"><default-response url="//${appRoot}/Catalog/Product/EditProduct"/></transition>
     <transition name="editFacility"><default-response url="//${appRoot}/Facility/EditFacility"/></transition>
@@ -30,28 +30,9 @@ along with this software (see the LICENSE.md file). If not, see
     <transition-include name="emailScreenAsync" location="component://webroot/template/screen/BasicTransitions.xml"/>
 
     <actions>
-        <if condition="!dateRange_period &amp;&amp; !dateRange_from">
-            <set field="dateRange_period" from="dateRange_period ?: 'week'"/>
-            <set field="dateRange_poffset" from="dateRange_poffset ?: '-1'"/>
-        </if>
-
-        <set field="rangeList" from="ec.user.getPeriodRange('dateRange', context)"/>
-        <!-- special case for AssetOnHandSummary, these 2 Timestamps must be in the context -->
-        <set field="fromDate" from="rangeList[0]"/>
-        <set field="thruDate" from="rangeList[1] ?: ec.user.nowTimestamp"/>
-
-        <set field="fieldDescriptions" from="[
-            [fieldName:'Shipments In', description:'All Incoming Shipments except Return Shipments'],
-            [fieldName:'Returns', description:'Return Shipments'],
-            [fieldName:'Produced', description:'Produced by Production Run'],
-            [fieldName:'Other Receipts', description:'All Receipts except Incoming Shipments and Production Runs'],
-            [fieldName:'All Receipts', description:'All Asset Receipts'],
-            [fieldName:'Shipments Out', description:'All Outgoing Shipments'],
-            [fieldName:'Consumed', description:'Consumed by Production Run'],
-            [fieldName:'Other Issuances', description:'All Issuances except Outgoing Shipments and Production Runs'],
-            [fieldName:'All Issuances', description:'All Asset Issuances'],
-            [fieldName:'Adjustments', description:'Physical Inventory Adjustments'],
-        ]"/>
+        <if condition="!asOfDate"><set field="asOfDate" from="ec.l10n.format(ec.user.nowTimestamp, 'yyyy-MM-dd')"/></if>
+        <!-- FUTURE: [OrgTimeZoneMarker] instead of using Java system default TimeZone use one configured for the organization -->
+        <set field="thruTimestamp" from="asOfDate ? ec.l10n.parseTimestamp(asOfDate + ' 23:59:59.999', 'yyyy-MM-dd HH:mm:ss.SSS', null, TimeZone.getDefault()) : ec.user.nowTimestamp"/>
     </actions>
     <widgets>
         <section-include name="EmailScreenSection" location="component://webroot/template/screen/BasicTransitions.xml"/>
@@ -64,28 +45,36 @@ along with this software (see the LICENSE.md file). If not, see
 
         <form-list name="AssetOnHandSummary" list="summaryList" skip-form="true" header-dialog="true" saved-finds="true"
                 select-columns="true" show-all-button="true" show-csv-button="true" show-xlsx-button="true">
-            <entity-find entity-name="mantle.product.asset.AssetOnHandSummary" list="summaryList" use-clone="true">
-                <search-form-inputs default-order-by="pseudoId" require-parameters="true"/>
+            <entity-find entity-name="mantle.product.asset.AssetAndDetailSummary" list="summaryList">
+                <search-form-inputs default-order-by="pseudoId,receivedDate" require-parameters="true"/>
                 <!-- NOTE: this query will get slower over time, not a good approach for large inventory histories but only way to
                     get valuation at any point in time unless we calculate and save interim values -->
-                <econdition field-name="effectiveDate" operator="less-equals" from="thruDate"/>
+                <econdition field-name="effectiveDate" operator="less-equals" from="thruTimestamp"/>
                 <econdition field-name="quantityOnHandDiff" operator="not-equals" from="0.0"/>
-                <!-- don't do this: show all that have ever had inventory, and this excludes anything with Starting 0 and Change 0 even if there were shipments in and out during the period
                 <having-econditions><econditions combine="or">
-                    <econdition field-name="startingOnHand" operator="not-equals" from="0.0"/>
-                    <econdition field-name="onHandChange" operator="not-equals" from="0.0"/>
+                    <econdition field-name="quantityOnHandTotal" operator="not-equals" from="0.0"/>
                 </econditions></having-econditions>
-                -->
-                <select-field field-name="productId,pseudoId,productName,startingOnHand,onHandChange"/>
+                <select-field field-name="productId,receivedDate"/>
             </entity-find>
             <row-actions>
-                <if condition="locationSeqId">
+                <if condition="facilityId &amp;&amp; locationSeqId">
                     <entity-find-one entity-name="mantle.facility.FacilityLocation" value-field="facLoc" cache="true">
                         <field-map field-name="facilityId"/><field-map field-name="locationSeqId"/></entity-find-one>
                 </if>
             </row-actions>
 
-            <field name="dateRange"><header-field><date-period/></header-field></field>
+            <field name="asOfDate"><header-field><date-time type="date"/></header-field></field>
+
+            <field name="assetId"><header-field title="Asset" show-order-by="true"/>
+                <default-field><link url="assetDetail" text="${assetId}" link-type="anchor"/></default-field></field>
+
+            <field name="receivedDate">
+                <header-field title="Received Date" show-order-by="true"><date-period/></header-field>
+                <default-field><display/></default-field>
+            </field>
+            <field name="daysReceived" from="ec.user.nowTimestamp - receivedDate">
+                <default-field title="Days Since Receipt"><display/></default-field></field>
+
             <field name="ownerPartyId">
                 <header-field title="Owner Party"><drop-down allow-empty="true">
                     <dynamic-options transition="searchPartyList" server-search="true" min-length="0" parameter-map="[roleTypeId:'OrgInternal']"/>
@@ -109,9 +98,9 @@ along with this software (see the LICENSE.md file). If not, see
             </field>
 
             <field name="productId">
-                <header-field title="Product" show-order-by="true"><drop-down allow-empty="true">
+                <header-field title="Product" show-order-by="true"><drop-down allow-multiple="true">
                     <dynamic-options transition="getProductList" server-search="true" min-length="0"/></drop-down></header-field>
-                <default-field><display/></default-field>
+                <default-field><link url="editProduct" entity-name="mantle.product.Product" text="ProductNameTemplate" link-type="anchor"/></default-field>
             </field>
             <field name="pseudoId">
                 <header-field title="Product ID" show-order-by="true"/>
@@ -122,55 +111,15 @@ along with this software (see the LICENSE.md file). If not, see
                 <default-field><link url="editProduct" text="${productName}" link-type="anchor"/></default-field>
             </field>
 
-            <field name="effectiveDate"><default-field title="Effective Date"><display/></default-field></field>
-            <field name="shipmentId"><header-field title="Shipment" show-order-by="true"/>
-                <default-field><link url="shipmentDetail" text="${shipmentId}" link-type="anchor" condition="shipmentId"/></default-field></field>
-            <field name="returnId"><header-field title="Return" show-order-by="true"/>
-                <default-field><link url="editReturn" text="${returnId}" link-type="anchor" condition="returnId"/></default-field></field>
-            <field name="assetId"><header-field title="Asset" show-order-by="true"/>
-                <default-field><link url="assetDetail" text="${assetId}" link-type="anchor"/></default-field></field>
-            <field name="receivedDate">
-                <header-field title="Received Date" show-order-by="true"><date-period/></header-field>
-                <default-field><display/></default-field>
-            </field>
-            <field name="assetIssuanceId"><header-field title="Issuance" show-order-by="true"/>
-                <default-field><display/></default-field></field>
-            <field name="assetReceiptId"><header-field title="Receipt" show-order-by="true"/>
-                <default-field><display/></default-field></field>
-            <field name="physicalInventoryId"><header-field title="Physical Inv" show-order-by="true"/>
-                <default-field><display/></default-field></field>
-
-            <field name="startingOnHand" align="right"><default-field title="Starting"><display/></default-field></field>
-
-            <field name="receiptsShipmentNotReturn" align="right"><default-field title="Shipments In"><display/></default-field></field>
-            <field name="receiptsReturns" align="right"><default-field title="Returns"><display/></default-field></field>
-            <field name="receiptsWorkEffort" align="right"><default-field title="Produced"><display/></default-field></field>
-            <field name="receiptsOther" align="right"><default-field title="Other Receipts"><display/></default-field></field>
-            <field name="receiptsAll" align="right"><default-field title="All Receipts"><display/></default-field></field>
-
-            <field name="issuancesShipments" align="right"><default-field title="Shipments Out"><display/></default-field></field>
-            <field name="issuancesWorkEffort" align="right"><default-field title="Consumed"><display/></default-field></field>
-            <field name="issuancesOther" align="right"><default-field title="Other Issuances"><display/></default-field></field>
-            <field name="issuancesAll" align="right"><default-field title="All Issuances"><display/></default-field></field>
-
-            <field name="physicalAdjustments" align="right"><default-field title="Adjustments"><display/></default-field></field>
-
-            <field name="onHandChange" align="right"><default-field title="Change"><display/></default-field></field>
-            <field name="endingOnHand" from="(startingOnHand ?: 0.0) + (onHandChange ?: 0.0)" align="right">
-                <default-field title="Ending"><display/></default-field></field>
+            <field name="quantityOnHandTotal" align="right"><default-field title="On Hand"><display/></default-field></field>
 
             <field name="find"><header-field title="Find"><submit/></header-field></field>
 
             <form-list-column><field-ref name="pseudoId"/></form-list-column>
             <form-list-column><field-ref name="productName"/></form-list-column>
-            <form-list-column><field-ref name="startingOnHand"/></form-list-column>
-            <form-list-column><field-ref name="receiptsShipmentNotReturn"/></form-list-column>
-            <form-list-column><field-ref name="receiptsOther"/></form-list-column>
-            <form-list-column><field-ref name="receiptsReturns"/></form-list-column>
-            <form-list-column><field-ref name="issuancesShipments"/></form-list-column>
-            <form-list-column><field-ref name="physicalAdjustments"/></form-list-column>
-            <form-list-column><field-ref name="onHandChange"/></form-list-column>
-            <form-list-column><field-ref name="endingOnHand"/></form-list-column>
+            <form-list-column><field-ref name="receivedDate"/></form-list-column>
+            <form-list-column><field-ref name="daysReceived"/></form-list-column>
+            <form-list-column><field-ref name="quantityOnHandTotal"/></form-list-column>
         </form-list>
 
         <section name="ShowSql" condition="summaryList_xafind?.getQueryTextList()"><widgets>

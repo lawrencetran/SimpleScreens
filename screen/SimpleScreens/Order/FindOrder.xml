@@ -137,6 +137,10 @@ along with this software (see the LICENSE.md file). If not, see
                         <dynamic-options transition="searchPartyList" server-search="true" min-length="2" parameter-map="[roleTypeId:'Customer']"/>
                     </drop-down></default-field></field>
                     <field name="otherPartyOrderId"><default-field title="Their Order ID"><text-line size="40"/></default-field></field>
+                    <field name="priority"><default-field><radio no-current-selected-key="5">
+                        <option key="1"/><option key="2"/><option key="3"/><option key="4"/><option key="5"/>
+                        <option key="6"/><option key="7"/><option key="8"/><option key="9"/>
+                    </radio></default-field></field>
                     <field name="shipBeforeDate"><default-field><date-time/></default-field></field>
                     <field name="estimatedDeliveryDate"><default-field title="Delivery Date"><date-time/></default-field></field>
                     <field name="submitButton"><default-field title="Create"><submit/></default-field></field>
@@ -179,7 +183,7 @@ along with this software (see the LICENSE.md file). If not, see
 
         <form-list name="OrderList" list="orderList" skip-form="true" header-dialog="true" select-columns="true" saved-finds="true"
                 show-csv-button="true" show-all-button="true">
-            <entity-find entity-name="mantle.order.OrderPartFindView" list="orderList">
+            <entity-find entity-name="mantle.order.OrderPartFindView" list="orderList" use-clone="true">
                 <search-form-inputs default-order-by="-entryDate,orderId,orderPartSeqId"
                         skip-fields="vendorRoleTypeId,customerRoleTypeId,customerClassificationId,itemTypeEnumId">
                     <!-- NOTE: OrderOpen no longer included by default to exclude shopping cart orders (salesChannelEnumId == 'ScWeb') -->
@@ -255,6 +259,11 @@ along with this software (see the LICENSE.md file). If not, see
                     <display-entity entity-name="moqui.basic.Enumeration"/></default-field>
             </field>
 
+            <field name="priority" align="center"><header-field show-order-by="true"><range-find size="4"/></header-field><default-field>
+                <display text="${priority == 1 ? '-- ' : (priority == 2 || priority == 3 ? '- ' : '')}${priority?:''}${priority == 1 ? ' --' : (priority == 2 || priority == 3 ? ' -' : '')}"
+                        style="${priority == 1 ? 'text-strong text-danger' : (priority == 2 || priority == 3 ? 'text-strong text-warning' : '')}"/>
+            </default-field></field>
+
             <field name="entryDate"><header-field show-order-by="true"><date-period/></header-field>
                 <default-field><display/></default-field></field>
             <field name="placedDate"><header-field show-order-by="true"><date-period/></header-field>
@@ -284,6 +293,10 @@ along with this software (see the LICENSE.md file). If not, see
                             <order-by field-name="storeName"/></entity-find></entity-options></drop-down>
                 </header-field>
                 <default-field><display-entity entity-name="mantle.product.store.ProductStore" text="${productStoreId}: ${storeName}"/></default-field>
+            </field>
+            <field name="shippingInstructions">
+                <header-field show-order-by="true"><text-find/></header-field>
+                <default-field><display text="${shippingInstructions?.take(35)?:''}${shippingInstructions?.length() &gt; 35 ? '...' : ''}" style="text-strong"/></default-field>
             </field>
 
             <field name="vendorPartyId">
@@ -407,17 +420,27 @@ along with this software (see the LICENSE.md file). If not, see
 
             <form-list-column><field-ref name="orderId"/><field-ref name="otherPartyOrderId"/>
                 <field-ref name="salesChannelEnumId"/></form-list-column>
+            <form-list-column><field-ref name="partStatusId"/><field-ref name="priority"/>
+                <field-ref name="partTotal"/></form-list-column>
             <form-list-column><field-ref name="entryDate"/><field-ref name="placedDate"/>
                 <field-ref name="shipBeforeDate"/></form-list-column>
-            <form-list-column><field-ref name="partStatusId"/><field-ref name="facilityId"/>
-                <field-ref name="productStoreId"/></form-list-column>
+            <form-list-column><field-ref name="facilityId"/><field-ref name="productStoreId"/>
+                <field-ref name="shippingInstructions"/></form-list-column>
             <form-list-column><field-ref name="vendorPartyId"/><field-ref name="customerPartyId"/>
                 <field-ref name="otherParties"/></form-list-column>
             <form-list-column><field-ref name="shipmentMethodEnumId"/><field-ref name="carrierPartyId"/>
                 <field-ref name="shipments"/></form-list-column>
-            <form-list-column><field-ref name="partTotal"/><!-- <field-ref name="quantityTotal"/> -->
-                <!-- <field-ref name="quantityNotAvailable"/><field-ref name="issuedQuantity"/> --></form-list-column>
             <form-list-column><field-ref name="submitButton"/></form-list-column>
         </form-list>
+        <!--
+        <section name="ShowSql" condition="orderList_xafind?.getQueryTextList()"><widgets>
+            <container-dialog id="ShowSqlDialog" button-text="Show SQL" type="info">
+                <section-iterate name="ShowSqlIter" list="orderList_xafind?.getQueryTextList()" entry="queryText"><widgets>
+                    <label text="${queryText}" type="p"/>
+                    <label text="${orderList_xafind}" type="p"/>
+                </widgets></section-iterate>
+            </container-dialog>
+        </widgets></section>
+        -->
     </widgets>
 </screen>
