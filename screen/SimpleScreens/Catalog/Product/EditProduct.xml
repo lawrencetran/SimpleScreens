@@ -96,7 +96,7 @@ along with this software (see the LICENSE.md file). If not, see
         </container-dialog>
         <link url="findAssetSummary" text="Find Assets" parameter-map="[productId:productId]"/>
 
-        <container-row><row-col lg="5">
+        <container-row><row-col lg="6">
             <form-single name="EditProductForm" map="product" transition="updateProduct">
                 <field name="productId"><default-field><hidden/></default-field></field>
                 <field name="pseudoId"><default-field title="ID"><text-line size="40"/></default-field></field>
@@ -158,11 +158,33 @@ along with this software (see the LICENSE.md file). If not, see
                     <widget-template-include location="component://webroot/template/screen/BasicWidgetTemplates.xml#enumDropDown">
                         <set field="enumTypeId" value="SignatureRequired"/><set field="allowEmpty" value="true"/></widget-template-include>
                 </default-field></field>
+                <field name="originGeoId"><default-field title="Country of Origin">
+                    <drop-down allow-empty="true">
+                        <entity-options key="${geoId}" text="${geoCodeAlpha3} - ${geoName}">
+                            <entity-find entity-name="moqui.basic.Geo" list="geoList">
+                                <econdition field-name="geoTypeEnumId" value="GEOT_COUNTRY"/>
+                                <order-by field-name="geoCodeAlpha2"/>
+                            </entity-find>
+                        </entity-options>
+                    </drop-down>
+                </default-field></field>
 
                 <field name="submitButton"><default-field title="Update"><submit/></default-field></field>
+
+                <field-layout>
+                    <fields-not-referenced/>
+                    <field-row><field-ref name="productTypeEnumId"/><field-ref name="productClassEnumId"/></field-row>
+                    <field-row><field-ref name="assetTypeEnumId"/><field-ref name="assetClassEnumId"/></field-row>
+                    <field-ref name="ownerPartyId"/>
+                    <field-row><field-ref name="amountFixed"/><field-ref name="amountUomId"/></field-row>
+                    <field-row><field-ref name="salesIntroductionDate"/><field-ref name="salesDiscontinuationDate"/></field-row>
+                    <field-row><field-ref name="signatureRequiredEnumId"/><field-ref name="originGeoId"/></field-row>
+                    <field-ref name="submitButton"/>
+                </field-layout>
+
             </form-single>
 
-        </row-col><row-col lg="7">
+        </row-col><row-col lg="6">
 
             <container-box><box-header title="Identification"/><box-toolbar>
                 <container-dialog id="AddIdentificationDialog" button-text="Add Identification">
