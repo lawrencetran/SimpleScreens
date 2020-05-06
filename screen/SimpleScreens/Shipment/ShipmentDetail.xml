@@ -270,8 +270,10 @@ along with this software (see the LICENSE.md file). If not, see
             </widgets></section>
             <section name="ShipShipmentSection" condition="(isIncoming &amp;&amp; shipment.statusId in ['ShipInput', 'ShipScheduled', 'ShipPicked', 'ShipPacked']) ||
                     ((isOutgoing || isTransfer) &amp;&amp; shipment.statusId == 'ShipPacked')"><widgets>
-                <container-dialog id="SetShippedDialog" button-text="Set Shipped" type="${isOutgoing || isTransfer ? 'success' : 'primary'}">
-                    <label text="Set as Shipped?" condition="isOutgoing" style="text-success" type="p"/>
+                <container-dialog id="SetShippedDialog" button-text="Set Shipped" type="${isOutgoing || isTransfer ? (!hasAllTrackingCodes ? 'danger' : (!hasAllLabels ? 'warning' : 'success')) : 'primary'}">
+                    <label text="Set as Shipped? If a Shipment Shipped email is configured it will be sent to the Customer." condition="isOutgoing" style="text-success" type="p"/>
+                    <container><label text="Not all packages have Labels" type="strong" style="text-warning" condition="!hasAllLabels"/></container>
+                    <container><label text="Not all packages have Tracking Codes" type="strong" style="text-danger" condition="!hasAllTrackingCodes"/></container>
                     <form-single name="SetShippedForm" transition="shipShipment" focus-field="submitButton">
                         <field name="shipmentId"><default-field><display/></default-field></field>
                         <field name="actualStartDate" from="ec.user.nowTimestamp">
@@ -282,7 +284,7 @@ along with this software (see the LICENSE.md file). If not, see
             </widgets></section>
             <section name="DeliverShipmentSection" condition="(anyReceived &amp;&amp; shipment.statusId in ['ShipScheduled', 'ShipPacked', 'ShipShipped']) ||
                     (isOutgoing &amp;&amp; shipment.statusId in ['ShipPacked', 'ShipShipped'])"><widgets>
-                <container-dialog id="SetDeliveredDialog" button-text="Set Delivered" type="success">
+                <container-dialog id="SetDeliveredDialog" button-text="Set Delivered">
                     <label text="Set as Delivered and generate invoice for order items if needed?" condition="isIncoming" type="p"/>
                     <label text="Set as Delivered?" condition="isOutgoing" type="p"/>
                     <label text="Set to Delivered? No additional items may be received once Delivered." condition="isTransfer"/>
@@ -327,6 +329,12 @@ along with this software (see the LICENSE.md file). If not, see
                         <#list packageRouteSegList! as packageRouteSeg>
                             <#if packageRouteSeg.labelUrl?has_content>'${getShipmentLabelPath}?shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}',</#if>
                             <#if packageRouteSeg.returnLabelUrl?has_content>'${getShipmentLabelPath}?retLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}',</#if>
+                        </#list>
+                        ]);
+                        moqui.printUrlMain([
+                        <#list packageRouteSegList! as packageRouteSeg>
+                            <#if packageRouteSeg.internationalInvoiceUrl?has_content>'${getShipmentLabelPath}?intlInvoiceLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}',</#if>
+                            <#if packageRouteSeg.returnIntlInvoiceUrl?has_content>'${getShipmentLabelPath}?retLabel=true&intlInvoiceLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}',</#if>
                         </#list>
                         ]);
                     }
@@ -955,16 +963,16 @@ along with this software (see the LICENSE.md file). If not, see
                             </row-actions>
                             <field name="shipmentId"><default-field><hidden/></default-field></field>
                             <field name="shipmentItemSourceId"><default-field><hidden/></default-field></field>
-                            <field name="orderId"><default-field title="Order">
-                                <link url="orderDetail" text="${orderId?:''}" link-type="anchor"/></default-field></field>
-                            <field name="orderItemSeqId"><default-field title="Item"><display/></default-field></field>
+                            <field name="orderId"><default-field title="Order Item">
+                                <link url="orderDetail" text="${orderId?:''}:${orderItemSeqId?:''}" link-type="anchor" condition="orderId"/></default-field></field>
+                            <!-- <field name="orderItemSeqId"><default-field title="Item"><display/></default-field></field> -->
 
                             <field name="quantitySis" from="quantity">
                                 <default-field title="Quantity"><display/></default-field></field>
                             <field name="quantityNotHandled"><default-field title="Not Issued"><display/></default-field></field>
 
                             <field name="invoiceId"><default-field title="Invoice Item">
-                                <link url="editInvoice" text="${invoiceId?:''}:${invoiceItemSeqId?:''}" link-type="anchor"/></default-field></field>
+                                <link url="editInvoice" text="${invoiceId?:''}:${invoiceItemSeqId?:''}" link-type="anchor" condition="invoiceId"/></default-field></field>
 
                             <field name="assetReservations">
                                 <conditional-field condition="existingResList">
@@ -1026,8 +1034,13 @@ along with this software (see the LICENSE.md file). If not, see
                                 <default-field title="Reservation"><display/></default-field>
                             </field>
 
-                            <field name="orderId"><default-field title="Order"><link url="orderDetail" text="${orderId}" link-type="anchor"/></default-field></field>
-                            <field name="orderItemSeqId"><default-field title="Item"><display/></default-field></field>
+                            <field name="orderId"><default-field title="Order Item">
+                                <link url="orderDetail" text="${orderId}:${orderItemSeqId?:''}" link-type="anchor" condition="orderId"/></default-field></field>
+                            <!-- <field name="orderItemSeqId"><default-field title="Item"><display/></default-field></field> -->
+
+                            <field name="invoiceId"><default-field title="Invoice Item">
+                                <link url="editInvoice" text="${invoiceId?:''}:${invoiceItemSeqId?:''}" link-type="anchor" condition="invoiceId"/></default-field></field>
+
                             <field name="acctgTransList"><default-field title="TX">
                                 <section-iterate name="IssAcctgTransList" list="issAcctgTransList" entry="issAcctgTrans"><widgets>
                                     <link url="editTransaction" text="${issAcctgTrans.acctgTransId}" link-type="anchor"
@@ -1242,6 +1255,11 @@ along with this software (see the LICENSE.md file). If not, see
                         <section name="QzPrintLabelSection" condition="packageRouteSeg?.labelUrl || packageRouteSeg?.labelImage"><widgets><render-mode>
                             <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlLabel('${getShipmentLabelPath}?shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="glyphicon glyphicon-print"></i> Label</button>]]></text></render-mode></widgets></section>
 
+                        <link url="${packageRouteSeg.internationalInvoiceUrl}" text="Com. Invoice" url-type="plain" target-window="_blank"
+                                btn-type="info" icon="glyphicon glyphicon-download" condition="packageRouteSeg?.internationalInvoiceUrl"/>
+                        <section name="QzPrintIntlInvcSection" condition="packageRouteSeg?.internationalInvoiceUrl || packageRouteSeg?.internationalInvoice"><widgets><render-mode>
+                            <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('${getShipmentLabelPath}?intlInvoiceLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="glyphicon glyphicon-print"></i> Com. Invoice</button>]]></text></render-mode></widgets></section>
+
                         <link url="${packageRouteSeg.returnLabelUrl}" text="Ret Label" url-type="plain" target-window="_blank"
                                 btn-type="info" icon="glyphicon glyphicon-download" condition="packageRouteSeg?.returnLabelUrl"/>
                         <link url="getShipmentLabel" text="Ret Label" target-window="_blank" btn-type="info" icon="glyphicon glyphicon-download"
@@ -1249,6 +1267,11 @@ along with this software (see the LICENSE.md file). If not, see
                                 parameter-map="[retLabel:'true', shipmentId:shipmentId, shipmentPackageSeqId:packageRouteSeg.shipmentPackageSeqId, shipmentRouteSegmentSeqId:packageRouteSeg.shipmentRouteSegmentSeqId]"/>
                         <section name="QzPrintRetLabelSection" condition="packageRouteSeg?.returnLabelUrl || packageRouteSeg?.returnLabelImage"><widgets><render-mode>
                             <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlLabel('${getShipmentLabelPath}?retLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="glyphicon glyphicon-print"></i> Ret Lbl</button>]]></text></render-mode></widgets></section>
+
+                        <link url="${packageRouteSeg.returnIntlInvoiceUrl}" text="Ret Com Invc" url-type="plain" target-window="_blank"
+                                btn-type="info" icon="glyphicon glyphicon-download" condition="packageRouteSeg?.returnIntlInvoiceUrl"/>
+                        <section name="QzPrintRetIntlInvcSection" condition="packageRouteSeg?.returnIntlInvoiceUrl"><widgets><render-mode>
+                            <text type="vuet"><![CDATA[<button v-if="$root.qzVue" class="btn btn-default btn-sm" onclick="moqui.printUrlMain('${getShipmentLabelPath}?retLabel=true&intlInvoiceLabel=true&shipmentId=${packageRouteSeg.shipmentId}&shipmentPackageSeqId=${packageRouteSeg.shipmentPackageSeqId}&shipmentRouteSegmentSeqId=${packageRouteSeg.shipmentRouteSegmentSeqId}')"><i class="glyphicon glyphicon-print"></i> Ret Com Invc</button>]]></text></render-mode></widgets></section>
 
                         <container-dialog id="PrintLabelDialog" button-text="Net Print" type="success"
                                 condition="(packageRouteSeg?.labelUrl || packageRouteSeg?.labelImage != null) &amp;&amp; networkPrinterList">
