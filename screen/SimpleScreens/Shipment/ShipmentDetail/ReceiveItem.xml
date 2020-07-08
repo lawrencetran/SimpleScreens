@@ -18,6 +18,9 @@ along with this software (see the LICENSE.md file). If not, see
     <parameter name="shipmentId" required="true"/>
     <parameter name="productId"/>
     <parameter name="statusId"/>
+    <!-- FILTER PASS THROUGH -->
+    <parameter name="filterProductId"/><parameter name="onlyRemaining"/>
+    <parameter name="pageIndex"/>
 
     <transition name="receive"><service-call name="mantle.shipment.ShipmentServices.receive#ShipmentProduct"/>
         <default-response url=".."/></transition>
@@ -30,24 +33,15 @@ along with this software (see the LICENSE.md file). If not, see
     <transition-include name="getContainerList" location="component://SimpleScreens/template/facility/FacilityTransitions.xml"/>
 
     <actions>
-        <entity-find-one entity-name="mantle.shipment.ShipmentItem" value-field="shipmentItem"/>
-        <if condition="shipmentItem == null">
-            <!-- see if productId is a pseudoId or ProductIdentification -->
-            <entity-find-one entity-name="mantle.product.Product" value-field="product">
-                <field-map field-name="pseudoId" from="productId"/></entity-find-one>
-            <if condition="product != null"><set field="productId" from="product.productId"/></if>
-            <if condition="product == null">
-                <entity-find entity-name="mantle.product.ProductIdentification" list="prodIdentList">
-                    <econdition field-name="idValue" from="productId"/></entity-find>
-                <if condition="prodIdentList.size() == 1"><set field="productId" from="prodIdentList[0].productId"/></if>
-                <if condition="prodIdentList.size() &gt; 1">
-                    <message type="warning">Found multiple products with ID ${scanId}: ${prodIdentList*.productId.join(', ')}</message></if>
-            </if>
+        <set field="origProductId" from="productId"/>
+        <service-call name="mantle.product.ProductServices.find#ProductByIdValue" out-map="productByIdOut"
+                in-map="[idValue:productId, shipmentId:shipmentId]"/>
+        <set field="productId" from="productByIdOut.productId ?: productId"/>
+        <entity-find-one entity-name="mantle.product.Product" value-field="product"/>
+        <if condition="product == null"><return error="true" message="No Product found with ID ${origProductId}"/></if>
 
-            <entity-find-one entity-name="mantle.shipment.ShipmentItem" value-field="shipmentItem"/>
-            <if condition="shipmentItem == null"><return error="true" message="Shipment ${shipmentId} item ${productId} not found"/></if>
-        </if>
-        <if condition="product == null"><entity-find-one entity-name="mantle.product.Product" value-field="product"/></if>
+        <entity-find-one entity-name="mantle.shipment.ShipmentItem" value-field="shipmentItem"/>
+        <if condition="shipmentItem == null"><return error="true" message="Shipment ${shipmentId} item ${productId} not found"/></if>
 
         <service-call name="mantle.shipment.ShipmentServices.get#ShipmentDisplayInfo" in-map="[shipmentId:shipmentId]" out-map="context"/>
         <service-call name="org.moqui.impl.BasicServices.find#Enumeration" in-map="[enumTypeId:'RejectionReason']" out-map="reasonOut"/>
@@ -79,6 +73,14 @@ along with this software (see the LICENSE.md file). If not, see
                 <break/>
             </if>
         </iterate>
+
+        <!-- if an AssetOwner Party is specified for the Shipment use it as the default Asset.ownerPartyId -->
+        <entity-find entity-name="mantle.shipment.ShipmentParty" list="assetOwnerPartyList">
+            <econdition field-name="shipmentId"/>
+            <econdition field-name="roleTypeId" value="AssetOwner"/>
+            <order-by field-name="partyId"/>
+        </entity-find>
+        <set field="ownerPartyId" from="assetOwnerPartyList ? assetOwnerPartyList[0].partyId : null"/>
 
         <!-- try to get the default acquireCost from order items -->
         <set field="orderShipmentItemSourceList" from="shipmentItemSourceList.findAll({ it.orderId &amp;&amp; it.orderItemSeqId })"/>
@@ -123,6 +125,12 @@ along with this software (see the LICENSE.md file). If not, see
     <widgets>
         <form-single name="ReceiveForm" transition="receive">
             <field name="shipmentId"><default-field><hidden/></default-field></field>
+
+            <!-- FILTER PASS THROUGH -->
+            <field name="filterProductId"><default-field><hidden/></default-field></field>
+            <field name="onlyRemaining"><default-field><hidden/></default-field></field>
+            <field name="pageIndex"><default-field><hidden/></default-field></field>
+
             <field name="fromPartyName"><default-field title="Supplier">
                 <display text="PartyNameTemplate" text-map="fromPartyDetail"/></default-field></field>
             <field name="productId">
